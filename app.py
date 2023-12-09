@@ -6,6 +6,9 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from jwt.exceptions import ExpiredSignatureError
+import json
+
+
 
 app = Flask(__name__)
 api = Api(app)
@@ -13,39 +16,10 @@ CORS(app)
 
 app.config['MONGO_URI'] = 'mongodb://localhost:27017/car_used'
 app.config['JWT_SECRET_KEY'] = 'your-secret-key'
-app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
-app.config['JWT_COOKIE_SECURE'] = False
 client = MongoClient(app.config['MONGO_URI'])
 db = client.get_database()
 jwt = JWTManager(app)
 
-
-@jwt.expired_token_loader
-def expired_token_callback(expired_token):
-    return jsonify({"message": "Token has expired", "error": "token_expired"}), 401
-
-
-@jwt.invalid_token_loader
-def invalid_token_callback(error):
-    return (
-        jsonify(
-            {"message": "Signature verification failed", "error": "invalid_token"}
-        ),
-        401,
-    )
-
-
-@jwt.unauthorized_loader
-def missing_token_callback(error):
-    return (
-        jsonify(
-            {
-                "message": "Request doesn't contain a valid token",
-                "error": "authorization_header",
-            }
-        ),
-        401,
-    )
 
 
 class cars_List(Resource):
@@ -123,6 +97,25 @@ class UserInfo(Resource):
             safe_user_data = {
                 'userName': user_data['userName'], 'email': user_data['email']}
             return safe_user_data, 200
+        else:
+            return {'message': 'User not found'}, 404
+
+    @jwt_required()
+    def put(self):
+        current_user = get_jwt_identity()
+        user_data = db.user.find_one({'userName': current_user})
+
+        if user_data:
+            data = request.get_json()
+            new_email = data.get('email')
+
+            # Update user information
+            db.user.update_one(
+                {'userName': current_user},
+                {'$set': {'email': new_email}}
+            )
+
+            return {'message': 'User information updated successfully'}, 200
         else:
             return {'message': 'User not found'}, 404
 
